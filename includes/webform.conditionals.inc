@@ -116,6 +116,12 @@ function webform_conditionals_form($form, &$form_state, $node) {
       'callback' => 'webform_conditionals_ajax',
     ),
   );
+  // Create dummy remove button for form alignment only.
+  $form['conditionals']['new']['remove'] = array(
+    '#type' => 'submit',
+    '#value' => t('-'),
+    '#disabled' => TRUE,
+  );
 
   $form['actions'] = array(
     '#type' => 'actions',
@@ -151,6 +157,7 @@ function webform_conditionals_form_add($form, &$form_state) {
   $form_state['values']['conditionals'][] = array(
     'rules' => array(
       array(
+        'source_type' => 'component',
         'source' => NULL,
         'operator' => NULL,
         'value' => NULL,
@@ -283,13 +290,14 @@ function theme_webform_conditional_groups($variables) {
   $element_count = count($element_children);
   foreach ($element_children as $index => $key) {
     if ($key === 'new') {
-      $data = '';
-      if ($element_count === 1) {
-        $data = t('There are no conditional actions on this form.') . ' ';
-      }
       $even_odd = ($index + 1) % 2 ? 'odd' : 'even';
       $element[$key]['weight']['#attributes']['class'] = array('webform-conditional-weight');
-      $data = '<div class="webform-conditional-new">' . $data . t('Add a new condition:') . ' ' . drupal_render($element[$key]['new']) . '</div>';
+      $data = '<div class="webform-conditional-new">';
+      if ($element_count === 1) {
+        $data .= t('There are no conditional actions on this form.') . ' ';
+      }
+      $data .= t('Add a new condition:') . ' ' . drupal_render($element[$key]['new']) . drupal_render($element[$key]['remove']);
+      $data .=  '</div>';
       $output .= '<tr class="webform-conditional-new-row ' . $even_odd . '">';
       $output .= '<td>' . $data . '</td>';
       $output .= '<td>' . drupal_render($element[$key]['weight']) . '</td>';
@@ -343,51 +351,82 @@ function _webform_conditional_expand($element) {
   $element['#prefix'] = '<div id="' . $wrapper_id . '">';
   $element['#suffix'] = '</div>';
 
+  // Note: Normally when creating a form it is only necessary to set
+  // '#default_value' and FAPI will fill in '#value' from the submitted 'input'.
+  // However because the form may be rebuilt with added rules and/or actions,
+  // the rid or aid of the new form may not match input. Setting '#value'
+  // prevents FAPI from setting the '#value' from the wrong rid/aid. The
+  // symptom of this is that the newly-created rule/action has the settings
+  // of the rule/action below.
+
   foreach ($element['#default_value']['rules'] as $rid => $conditional) {
+    $element['rules'][$rid]['source_type'] = array(
+      '#type' => 'value',
+      '#value' => $conditional['source_type'],
+    );
     $element['rules'][$rid]['source'] = array(
       '#type' => 'select',
       '#title' => t('Source'),
       '#options' => $element['#sources'],
-      '#default_value' => $element['#default_value']['rules'][$rid]['source'],
+      '#default_value' => $conditional['source'],
+      '#value' => $conditional['operator'],
     );
     $element['rules'][$rid]['operator'] = array(
       '#type' => 'select',
       '#title' => t('Operator'),
       '#options' => webform_conditional_operators_list(),
-      '#default_value' => $element['#default_value']['rules'][$rid]['operator'],
+      '#default_value' => $conditional['operator'],
+      '#value' => $conditional['operator'],
     );
     $element['rules'][$rid]['value'] = array(
       '#type' => 'textfield',
       '#title' => t('Value'),
       '#size' => 20,
-      '#default_value' => $element['#default_value']['rules'][$rid]['value'],
+      '#default_value' => $conditional['value'],
+      '#value' => $conditional['value'],
     );
-    $element['rules'][$rid]['remove'] = array(
-      '#type' => 'submit',
-      '#value' => t('-'),
-      '#submit' => array('webform_conditional_element_remove'),
-      '#name' => implode('_', $element['#parents']) . '_rules_' . $rid . '_remove',
-      '#attributes' => array('class' => array('webform-conditional-rule-remove')),
-      '#ajax' => array(
-        'progress' => 'none',
-        'callback' => 'webform_conditional_element_ajax',
-        'wrapper' => $wrapper_id,
-        'event' => 'click',
-      ),
-    );
-    $element['rules'][$rid]['add'] = array(
-      '#type' => 'submit',
-      '#value' => t('+'),
-      '#submit' => array('webform_conditional_element_add'),
-      '#name' => implode('_', $element['#parents']) . '_rules_' . $rid . '_add',
-      '#attributes' => array('class' => array('webform-conditional-rule-add')),
-      '#ajax' => array(
-        'progress' => 'none',
-        'callback' => 'webform_conditional_element_ajax',
-        'wrapper' => $wrapper_id,
-        'event' => 'click',
-      ),
-    );
+    if ($conditional['source_type'] == 'component') {
+      $element['rules'][$rid]['add_subconditional'] = array(
+        '#type' => 'submit',
+        '#value' => t('(+)'),
+        '#submit' => array('webform_conditional_element_add_subconditional'),
+        '#name' => implode('_', $element['#parents']) . '_rules_' . $rid . '_add_subconditional',
+        '#attributes' => array('class' => array('webform-conditional-rule-add')),
+        '#ajax' => array(
+          'progress' => 'none',
+          'callback' => 'webform_conditional_element_ajax',
+          'wrapper' => $wrapper_id,
+          'event' => 'click',
+        ),
+      );
+      $element['rules'][$rid]['add'] = array(
+        '#type' => 'submit',
+        '#value' => t('+'),
+        '#submit' => array('webform_conditional_element_add'),
+        '#name' => implode('_', $element['#parents']) . '_rules_' . $rid . '_add',
+        '#attributes' => array('class' => array('webform-conditional-rule-add')),
+        '#ajax' => array(
+          'progress' => 'none',
+          'callback' => 'webform_conditional_element_ajax',
+          'wrapper' => $wrapper_id,
+          'event' => 'click',
+        ),
+      );
+      $element['rules'][$rid]['remove'] = array(
+        '#type' => 'submit',
+        '#value' => t('-'),
+        '#submit' => array('webform_conditional_element_remove'),
+        '#name' => implode('_', $element['#parents']) . '_rules_' . $rid . '_remove',
+        '#attributes' => array('class' => array('webform-conditional-rule-remove')),
+        '#ajax' => array(
+          'progress' => 'none',
+          'callback' => 'webform_conditional_element_ajax',
+          'wrapper' => $wrapper_id,
+          'event' => 'click',
+        ),
+      );
+
+    }
 
     // The and/or selector is shown for every rule, even though the whole
     // conditional group shares a single and/or property. They are made to match
@@ -413,7 +452,8 @@ function _webform_conditional_expand($element) {
       '#type' => 'select',
       '#title' => t('Target'),
       '#options' => $element['#targets'],
-      '#default_value' => $element['#default_value']['actions'][$aid]['target'],
+      '#default_value' => $action['target'],
+      '#value' => $action['target'],
     );
     $element['actions'][$aid]['invert'] = array(
       '#type' => 'select',
@@ -422,33 +462,23 @@ function _webform_conditional_expand($element) {
         '0' => t('is'),
         '1' => t('isn\'t'),
       ),
-      '#default_value' => $element['#default_value']['actions'][$aid]['invert'],
+      '#default_value' => $action['invert'],
+      '#value' => $action['invert'],
     );
     $element['actions'][$aid]['action'] = array(
       '#type' => 'select',
       '#title' => t('Action'),
       '#options' => $element['#actions'],
-      '#default_value' => $element['#default_value']['actions'][$aid]['action'],
+      '#default_value' => $action['action'],
+      '#value' => $action['action'],
     );
     $element['actions'][$aid]['argument'] = array(
       '#type' => 'textfield',
       '#title' => t('Argument'),
       '#size' => 20,
       '#maxlength' => NULL,
-      '#default_value' => $element['#default_value']['actions'][$aid]['argument'],
-    );
-    $element['actions'][$aid]['remove'] = array(
-      '#type' => 'submit',
-      '#value' => t('-'),
-      '#submit' => array('webform_conditional_element_remove'),
-      '#name' => implode('_', $element['#parents']) . '_actions_' . $aid . '_remove',
-      '#attributes' => array('class' => array('webform-conditional-action-remove')),
-      '#ajax' => array(
-        'progress' => 'none',
-        'callback' => 'webform_conditional_element_ajax',
-        'wrapper' => $wrapper_id,
-        'event' => 'click',
-      ),
+      '#default_value' => $action['argument'],
+      '#value' => $action['argument'],
     );
     $element['actions'][$aid]['add'] = array(
       '#type' => 'submit',
@@ -456,6 +486,19 @@ function _webform_conditional_expand($element) {
       '#submit' => array('webform_conditional_element_add'),
       '#name' => implode('_', $element['#parents']) . '_actions_' . $aid . '_add',
       '#attributes' => array('class' => array('webform-conditional-action-add')),
+      '#ajax' => array(
+        'progress' => 'none',
+        'callback' => 'webform_conditional_element_ajax',
+        'wrapper' => $wrapper_id,
+        'event' => 'click',
+      ),
+    );
+    $element['actions'][$aid]['remove'] = array(
+      '#type' => 'submit',
+      '#value' => t('-'),
+      '#submit' => array('webform_conditional_element_remove'),
+      '#name' => implode('_', $element['#parents']) . '_actions_' . $aid . '_remove',
+      '#attributes' => array('class' => array('webform-conditional-action-remove')),
       '#ajax' => array(
         'progress' => 'none',
         'callback' => 'webform_conditional_element_ajax',
@@ -640,8 +683,9 @@ function theme_webform_conditional($variables) {
 
     if (isset($element['rules'][$rid]['add']) || isset($element['rules'][$rid]['remove'])) {
       $output .= '<span class="webform-conditional-operations webform-container-inline">';
-      $output .= drupal_render($element['rules'][$rid]['remove']);
+      $output .= drupal_render($element['rules'][$rid]['add_subconditional']);
       $output .= drupal_render($element['rules'][$rid]['add']);
+      $output .= drupal_render($element['rules'][$rid]['remove']);
       $output .= '</span>';
     }
 
@@ -675,8 +719,8 @@ function theme_webform_conditional($variables) {
 
     if (isset($element['actions'][$aid]['add']) || isset($element['actions'][$aid]['remove'])) {
       $output .= '<span class="webform-conditional-operations webform-container-inline">';
-      $output .= drupal_render($element['actions'][$aid]['remove']);
       $output .= drupal_render($element['actions'][$aid]['add']);
+      $output .= drupal_render($element['actions'][$aid]['remove']);
       $output .= '</span>';
     }
 
