@@ -343,13 +343,11 @@ function _webform_conditional_expand($element) {
   $element['#suffix'] = '</div>';
   $element['#wrapper_id'] = $wrapper_id;
 
-  // Note: Normally when creating a form it is only necessary to set
-  // '#default_value' and FAPI will fill in '#value' from the submitted 'input'.
-  // However because the form may be rebuilt with added rules and/or actions,
-  // the rid or aid of the new form may not match input. Setting '#value'
-  // prevents FAPI from setting the '#value' from the wrong rid/aid. The
-  // symptom of this is that the newly-created rule/action has the settings
-  // of the rule/action below.
+  // Note: When rules or actions are added, the new rules are inserted into
+  // $form_state['values']. So that FAPI can merge data from the post,
+  // $form_state['input'] must be adjusted to. To make this easier, hidden
+  // fields are added to the conditional_start and _end rules to ensure that
+  // each rule is represented in the POST.
 
   $level = 0;
   $andor_stack[0] = $element['#default_value']['andor'];
