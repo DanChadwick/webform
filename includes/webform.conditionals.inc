@@ -360,7 +360,7 @@ function _webform_conditional_expand($element) {
         $element['rules'][$rid] = array(
           '#level' => $level,
           'source_type' => array(
-            '#type' => 'value',
+            '#type' => 'hidden',
             '#value' => 'conditional_start',
           ),
           'operator' => array(
@@ -375,7 +375,7 @@ function _webform_conditional_expand($element) {
         $element['rules'][$rid] = array(
           '#level' => $level,
           'source_type' => array(
-            '#type' => 'value',
+            '#type' => 'hidden',
             '#value' => 'conditional_end',
           ),
           'andor' => array(
@@ -421,21 +421,18 @@ function _webform_conditional_rule_expand($element, $rid, $conditional, $level, 
       '#title' => t('Source'),
       '#options' => $element['#sources'],
       '#default_value' => $conditional['source'],
-      //'#value' => $conditional['source'],
     ),
     'operator' => array(
       '#type' => 'select',
       '#title' => t('Operator'),
       '#options' => webform_conditional_operators_list(),
       '#default_value' => $conditional['operator'],
-      //'#value' => $conditional['operator'],
     ),
     'value' => array(
       '#type' => 'textfield',
       '#title' => t('Value'),
       '#size' => 20,
       '#default_value' => $conditional['value'],
-      //'#value' => $conditional['value'],
     ),
     'add_subconditional' => array(
       '#type' => 'submit',
@@ -510,7 +507,6 @@ function _webform_conditional_action_expand($element, $aid, $action) {
       '#title' => t('Target'),
       '#options' => $element['#targets'],
       '#default_value' => $action['target'],
-      //'#value' => $action['target'],
     ),
     'invert' => array(
       '#type' => 'select',
@@ -520,14 +516,12 @@ function _webform_conditional_action_expand($element, $aid, $action) {
         '1' => t('isn\'t'),
       ),
       '#default_value' => $action['invert'],
-      //'#value' => $action['invert'],
     ),
     'action' => array(
       '#type' => 'select',
       '#title' => t('Action'),
       '#options' => $element['#actions'],
       '#default_value' => $action['action'],
-      //'#value' => $action['action'],
     ),
     'argument' => array(
       '#type' => 'textfield',
@@ -535,7 +529,6 @@ function _webform_conditional_action_expand($element, $aid, $action) {
       '#size' => 20,
       '#maxlength' => NULL,
       '#default_value' => $action['argument'],
-      //'#value' => $action['argument'],
     ),
     'add' => array(
       '#type' => 'submit',
@@ -632,9 +625,13 @@ function webform_conditional_element_add($form, &$form_state) {
 
   // Recurse through the form values until we find the root Webform conditional.
   $parent_values = &$form_state['values'];
+  $input_values = &$form_state['input'];
   foreach ($parents as $key) {
     if (array_key_exists($key, $parent_values)) {
       $parent_values = &$parent_values[$key];
+    }
+    if (array_key_exists($key, $input_values)) {
+      $input_values = &$input_values[$key];
     }
   }
 
@@ -642,8 +639,6 @@ function webform_conditional_element_add($form, &$form_state) {
   // right spot.
   $rids = array_keys($parent_values);
   $offset = array_search($rid, $rids);
-  $first = array_slice($parent_values, 0, $offset + 1);
-  $second = array_slice($parent_values, $offset + 1);
   if (empty($button['#subconditional'])) {
     $new[0] = $parent_values[$rid];
   }
@@ -662,8 +657,10 @@ function webform_conditional_element_add($form, &$form_state) {
     );
   }
 
-  $parent_values = array_merge($first, $new, $second);
-
+  // Update both $form_state['values'] and ['input] so that FAPI can merge
+  // input values from the POST into the new form.
+  $parent_values = array_merge(array_slice($parent_values, 0, $offset + 1), $new, array_slice($parent_values, $offset + 1));
+  $input_values = array_merge(array_slice($input_values, 0, $offset + 1), $new, array_slice($input_values, $offset + 1));
   $form_state['rebuild'] = TRUE;
 }
 
