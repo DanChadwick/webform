@@ -376,7 +376,7 @@ function _webform_conditional_expand($element) {
           '#value' => $conditional['operator'],
         );
         break;
-      case 'conditional_end:':
+      case 'conditional_end':
         --$level;
         break;
       default:
