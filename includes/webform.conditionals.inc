@@ -66,19 +66,23 @@ function webform_conditionals_form($form, &$form_state, $node) {
       '#theme' => 'webform_conditional_group_row',
       '#even_odd' => ++$index % 2 ? 'odd' : 'even',
       '#weight' => $weight,
-    );
-    $form['conditionals'][$rgid]['conditional'] = array(
-      '#type' => 'webform_conditional',
-      '#default_value' => $conditional_group,
-      '#nid' => $node->nid,
-      '#sources' => $source_list,
-      '#actions' => array(
-        'show' => t('shown'),
-        'require' => t('required'),
-        'set' => t('set to'),
+      'rgid' => array(
+        '#type' => 'value',
+        '#value' => $rgid,
       ),
-      '#targets' => $target_list,
-      '#parents' => array('conditionals', $rgid),
+      'conditional' => array(
+        '#type' => 'webform_conditional',
+        '#default_value' => $conditional_group,
+        '#nid' => $node->nid,
+        '#sources' => $source_list,
+        '#actions' => array(
+          'show' => t('shown'),
+          'require' => t('required'),
+          'set' => t('set to'),
+        ),
+        '#targets' => $target_list,
+        '#parents' => array('conditionals', $rgid),
+      ),
     );
     foreach ($conditional_group['actions'] as $action) {
       $cid = $action['target'];
@@ -220,7 +224,8 @@ function webform_conditionals_form_validate($form, &$form_state) {
         }
       }
       foreach ($conditional['rules'] as $rule_key => $rule) {
-        if (is_numeric($rule_key) && isset($targets[$rule['source']['#value']])) {
+        // Validate component rules, but not conditional_start/end rules.
+        if (is_numeric($rule_key) && $rule['source_type']['#value'] == 'component' && isset($targets[$rule['source']['#value']])) {
           form_set_error('conditionals][' . $conditional_key . '][rules][' . $rule_key . '][source',
                          t('The subject of the conditional cannot be the same as the component that is changed (%target).',
                          array('%target' => $components[$rule['source']['#value']]['name'])));
@@ -243,22 +248,7 @@ function webform_conditionals_form_submit($form, &$form_state) {
   // Remove the new conditional placeholder.
   unset($form_state['values']['conditionals']['new']);
 
-  $conditionals = array();
-
-  // Fill in missing properties for each value so that it can save properly.
-  // TODO: Remove hard-coded source and target type.
-  foreach ($form_state['values']['conditionals'] as $rgid => $conditional) {
-    $conditional['rgid'] = $rgid;
-    foreach ($conditional['rules'] as $rid => $rule) {
-      $conditional['rules'][$rid]['source_type'] = 'component';
-    }
-    foreach ($conditional['actions'] as $aid => $action) {
-      $conditional['actions'][$aid]['target_type'] = 'component';
-    }
-    $conditionals[$rgid] = $conditional;
-  }
-
-  $node->webform['conditionals'] = $conditionals;
+  $node->webform['conditionals'] = $form_state['values']['conditionals'];
   node_save($node);
   drupal_set_message(t('Conditionals for %title saved.', array('%title' => $node->title)));
 }
@@ -365,23 +355,43 @@ function _webform_conditional_expand($element) {
   $andor_stack[0] = $element['#default_value']['andor'];
 
   foreach ($element['#default_value']['rules'] as $rid => $conditional) {
-    $element['rules'][$rid]['source_type'] = array(
-      '#type' => 'value',
-      '#value' => $conditional['source_type'],
-    );
     switch ($conditional['source_type']) {
       case 'conditional_start':
-        $andor_stack[++$level] = $conditional['operator'];
-        $element['rules'][$rid]['operator'] = array(
-          '#type' => 'value',
-          '#value' => $conditional['operator'],
+        $element['rules'][$rid] = array(
+          '#level' => $level,
+          'source_type' => array(
+            '#type' => 'value',
+            '#value' => 'conditional_start',
+          ),
+          'operator' => array(
+            '#type' => 'value',
+            '#value' => $conditional['operator'],
+          ),
         );
+        $andor_stack[++$level] = $conditional['operator'];
         break;
       case 'conditional_end':
         --$level;
+        $element['rules'][$rid] = array(
+          '#level' => $level,
+          'source_type' => array(
+            '#type' => 'value',
+            '#value' => 'conditional_end',
+          ),
+          'andor' => array(
+            '#type' => 'select',
+            '#title' => t('And/or'),
+            '#options' => array(
+              'and' => t('and'),
+              'or' => t('or'),
+            ),
+            '#parents' => array_merge($element['#parents'], array('andor')),
+            '#default_value' => $element['#default_value']['andor'],
+          ),
+        );
         break;
       default:
-        $element['rules'][$rid] += _webform_conditional_rule_expand($element, $rid, $conditional, $level, $andor_stack[$level]);
+        $element['rules'][$rid] = _webform_conditional_rule_expand($element, $rid, $conditional, $level, $andor_stack[$level]);
         // break;
     }
   }
@@ -401,26 +411,31 @@ function _webform_conditional_expand($element) {
  */
 function _webform_conditional_rule_expand($element, $rid, $conditional, $level, $andor) {
   return array(
+    '#level' => $level,
+    'source_type' => array(
+      '#type' => 'value',
+      '#value' => $conditional['source_type'],
+    ),
     'source' => array(
       '#type' => 'select',
       '#title' => t('Source'),
       '#options' => $element['#sources'],
       '#default_value' => $conditional['source'],
-      '#value' => $conditional['source'],
+      //'#value' => $conditional['source'],
     ),
     'operator' => array(
       '#type' => 'select',
       '#title' => t('Operator'),
       '#options' => webform_conditional_operators_list(),
       '#default_value' => $conditional['operator'],
-      '#value' => $conditional['operator'],
+      //'#value' => $conditional['operator'],
     ),
     'value' => array(
       '#type' => 'textfield',
       '#title' => t('Value'),
       '#size' => 20,
       '#default_value' => $conditional['value'],
-      '#value' => $conditional['value'],
+      //'#value' => $conditional['value'],
     ),
     'add_subconditional' => array(
       '#type' => 'submit',
@@ -486,12 +501,16 @@ function _webform_conditional_rule_expand($element, $rid, $conditional, $level, 
  */
 function _webform_conditional_action_expand($element, $aid, $action) {
   return array(
+    'target_type' => array(
+      '#type' => 'value',
+      '#value' => $action['target_type'],
+    ),
     'target' => array(
       '#type' => 'select',
       '#title' => t('Target'),
       '#options' => $element['#targets'],
       '#default_value' => $action['target'],
-      '#value' => $action['target'],
+      //'#value' => $action['target'],
     ),
     'invert' => array(
       '#type' => 'select',
@@ -501,14 +520,14 @@ function _webform_conditional_action_expand($element, $aid, $action) {
         '1' => t('isn\'t'),
       ),
       '#default_value' => $action['invert'],
-      '#value' => $action['invert'],
+      //'#value' => $action['invert'],
     ),
     'action' => array(
       '#type' => 'select',
       '#title' => t('Action'),
       '#options' => $element['#actions'],
       '#default_value' => $action['action'],
-      '#value' => $action['action'],
+      //'#value' => $action['action'],
     ),
     'argument' => array(
       '#type' => 'textfield',
@@ -516,7 +535,7 @@ function _webform_conditional_action_expand($element, $aid, $action) {
       '#size' => 20,
       '#maxlength' => NULL,
       '#default_value' => $action['argument'],
-      '#value' => $action['argument'],
+      //'#value' => $action['argument'],
     ),
     'add' => array(
       '#type' => 'submit',
