@@ -405,7 +405,7 @@ function _webform_conditional_rule_expand($element, $rid, $conditional, $level, 
       '#title' => t('Source'),
       '#options' => $element['#sources'],
       '#default_value' => $conditional['source'],
-      '#value' => $conditional['operator'],
+      '#value' => $conditional['source'],
     ),
     'operator' => array(
       '#type' => 'select',
