@@ -733,6 +733,9 @@ function theme_webform_conditional($variables) {
     }
 
     $output .= '<div class="webform-conditional-rule">';
+    // Can't use theme('indentation') here because it causes the draghandle to
+    // be located after the last indentation div.
+    $output .= str_repeat('<div class="webform-indentation">&nbsp;</div>', $rule['#level']);
     $output .= drupal_render($rule['source_type']);
     $output .= '<div class="webform-container-inline webform-conditional-condition">';
     $output .= $source_phrase;

@@ -209,6 +209,11 @@ td.webform-email-option {
   line-height: 0;
 }
 
+.webform-indentation {
+  float: left;
+  width: 2em;
+}
+
 .webform-conditional-new input[disabled] {
   visibility: hidden;
 }
