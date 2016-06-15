@@ -370,14 +370,19 @@ function _webform_conditional_expand($element) {
     );
     switch ($conditional['source_type']) {
       case 'conditional_start':
+        $andor_stack[++$level] = $conditional['operator'];
+        $element['rules'][$rid]['operator'] = array(
+          '#type' => 'value',
+          '#value' => $conditional['operator'],
+        );
         break;
       case 'conditional_end:':
+        --$level;
         break;
       default:
-        $element['rules'][$rid] = _webform_conditional_rule_expand($element, $rid, $conditional, $level, $andor_stack[$level]);
+        $element['rules'][$rid] += _webform_conditional_rule_expand($element, $rid, $conditional, $level, $andor_stack[$level]);
         // break;
     }
-
   }
 
   // Remove the last and/or.
@@ -630,10 +635,10 @@ function webform_conditional_element_add($form, &$form_state) {
         'value' => NULL,
     );
     $new = array(
-      array('source_type' => 'subconditional_start', 'operator' => 'and') + $default_rule,
+      array('source_type' => 'conditional_start', 'operator' => 'and') + $default_rule,
       $default_rule,
       $default_rule,
-      array('source_type' => 'subconditional_end') + $default_rule,
+      array('source_type' => 'conditional_end') + $default_rule,
     );
   }
 
@@ -701,38 +706,50 @@ function theme_webform_conditional($variables) {
   $output .= '<span class="webform-conditional-if">' . t('If') . '</span>';
 
   foreach (element_children($element['rules']) as $rid) {
-    // Hide labels.
-    $element['rules'][$rid]['source']['#title_display'] = 'none';
-    $element['rules'][$rid]['operator']['#title_display'] = 'none';
-    $element['rules'][$rid]['value']['#title_display'] = 'none';
-    $element['rules'][$rid]['andor']['#title_display'] = 'none';
+    $rule = &$element['rules'][$rid];
+    switch ($rule['source_type']['#value']) {
+      case 'conditional_start':
+        $source_phrase = '<div class="webform-subconditional">' . t('(') . '</div>';
+        break;
+      case 'conditional_end':
+        $source_phrase = '<div class="webform-subconditional">' . t(')') . '</div>';
+        break;
+      default:
+        // Hide labels.
+        $rule['source']['#title_display'] = 'none';
+        $rule['operator']['#title_display'] = 'none';
+        $rule['value']['#title_display'] = 'none';
 
-    $source = '<div class="webform-conditional-source">' . drupal_render($element['rules'][$rid]['source']) . '</div>';
-    $operator = '<div class="webform-conditional-operator">' . drupal_render($element['rules'][$rid]['operator']) . '</div>';
-    $value = '<div class="webform-conditional-value">' . drupal_render($element['rules'][$rid]['value']) . '</div>';
+        $source = '<div class="webform-conditional-source">' . drupal_render($rule['source']) . '</div>';
+        $operator = '<div class="webform-conditional-operator">' . drupal_render($rule['operator']) . '</div>';
+        $value = '<div class="webform-conditional-value">' . drupal_render($rule['value']) . '</div>';
 
-    $source_phrase = t('!source !operator !value', array(
-      '!source' => $source,
-      '!operator' => $operator,
-      '!value' => $value,
-    ));
+        $source_phrase = t('!source !operator !value', array(
+          '!source' => $source,
+          '!operator' => $operator,
+          '!value' => $value,
+        ));
+        // break
+    }
 
     $output .= '<div class="webform-conditional-rule">';
+    $output .= drupal_render($rule['source_type']);
     $output .= '<div class="webform-container-inline webform-conditional-condition">';
     $output .= $source_phrase;
     $output .= '</div>';
 
-    if (isset($element['rules'][$rid]['andor'])) {
+    if (isset($rule['andor'])) {
+      $rule['andor']['#title_display'] = 'none';
       $output .= '<div class="webform-conditional-andor webform-container-inline">';
-      $output .= drupal_render($element['rules'][$rid]['andor']);
+      $output .= drupal_render($rule['andor']);
       $output .= '</div>';
     }
 
-    if (isset($element['rules'][$rid]['add']) || isset($element['rules'][$rid]['remove'])) {
+    if (isset($rule['add']) || isset($rule['remove'])) {
       $output .= '<span class="webform-conditional-operations webform-container-inline">';
-      $output .= drupal_render($element['rules'][$rid]['add_subconditional']);
-      $output .= drupal_render($element['rules'][$rid]['add']);
-      $output .= drupal_render($element['rules'][$rid]['remove']);
+      $output .= drupal_render($rule['add_subconditional']);
+      $output .= drupal_render($rule['add']);
+      $output .= drupal_render($rule['remove']);
       $output .= '</span>';
     }
 
