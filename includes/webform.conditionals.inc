@@ -166,6 +166,7 @@ function webform_conditionals_form_add($form, &$form_state) {
     'andor' => 'and',
     'actions' => array(
       array(
+        'target_type' => 'component',
         'target' => NULL,
         'invert' => NULL,
         'action' => NULL,
