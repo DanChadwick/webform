@@ -25,11 +25,13 @@ function webform_conditionals_form($form, &$form_state, $node) {
     $conditionals = $node->webform['conditionals'];
   }
   // Empty out any conditionals that have no rules or actions.
-  foreach ($conditionals as $rgid => $conditional) {
+  foreach ($conditionals as $rgid => &$conditional) {
+    webform_delete_empty_subconditionals($conditional);
     if (empty($conditional['rules']) || empty($conditional['actions'])) {
       unset($conditionals[$rgid]);
     }
   }
+  unset($conditional); // Drop PHP reference.
 
   // Check the current topological sort order for the conditionals and report any errors,
   // but only for actual form submissions and not for ajax-related form builds, such as
@@ -695,6 +697,36 @@ function webform_conditional_element_remove($form, &$form_state) {
   unset($parent_values[$current_id]);
 
   $form_state['rebuild'] = TRUE;
+}
+
+/**
+ * Helper. Delete any subconditionals which contain no rules.
+ */
+function webform_delete_empty_subconditionals(&$conditional) {
+  do {
+    $empty_deleted = FALSE;
+    $open_rid = NULL;
+    foreach ($conditional['rules'] as $rid => $rule) {
+      switch ($rule['source_type']) {
+        case 'conditional_start':
+          $open_rid = $rid;
+          break;
+        case 'conditional_end':
+          if ($open_rid) {
+            // A conditional_start rule was immediately followed by a
+            // conditional_end rule. Delete them both. Repeat the check in case
+            // the parent is now empty.
+            unset($conditional['rules'][$open_rid], $conditional['rules'][$rid]);
+            $open_rid = NULL;
+            $empty_deleted = TRUE;
+          }
+          break;
+        default:
+          $open_rid = NULL;
+          //break;
+      }
+    }
+  } while ($empty_deleted);
 }
 
 
