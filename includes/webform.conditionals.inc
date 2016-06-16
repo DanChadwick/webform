@@ -350,7 +350,12 @@ function _webform_conditional_expand($element) {
   // each rule is represented in the POST.
 
   $level = 0;
-  $andor_stack[0] = $element['#default_value']['andor'];
+  $andor_stack[0] = array(
+    'value' => $element['#default_value']['andor'],
+    'parents' => array_merge($element['#parents'], array('andor')),
+    'rid' => 0,
+    'first' => TRUE,
+  );
 
   foreach ($element['#default_value']['rules'] as $rid => $conditional) {
     switch ($conditional['source_type']) {
@@ -366,7 +371,12 @@ function _webform_conditional_expand($element) {
             '#value' => $conditional['operator'],
           ),
         );
-        $andor_stack[++$level] = $conditional['operator'];
+        $andor_stack[++$level] = array(
+          'value' => $conditional['operator'],
+          'parents' => array_merge($element['#parents'], array('rules', $rid, 'operator')),
+          'rid' => $rid,
+          'first' => TRUE,
+        );
         break;
       case 'conditional_end':
         --$level;
@@ -376,16 +386,7 @@ function _webform_conditional_expand($element) {
             '#type' => 'hidden',
             '#value' => 'conditional_end',
           ),
-          'andor' => array(
-            '#type' => 'select',
-            '#title' => t('And/or'),
-            '#options' => array(
-              'and' => t('and'),
-              'or' => t('or'),
-            ),
-            '#parents' => array_merge($element['#parents'], array('andor')),
-            '#default_value' => $element['#default_value']['andor'],
-          ),
+          'andor' => _webform_conditional_andor_expand($andor_stack[$level]),
         );
         break;
       default:
@@ -404,10 +405,36 @@ function _webform_conditional_expand($element) {
   return $element;
 }
 
+function _webform_conditional_andor_expand(&$andor) {
+  if ($andor['first']) {
+    $andor['first'] = FALSE;
+    return array(
+      '#type' => 'select',
+      '#title' => t('And/or'),
+      '#options' => array(
+        'and' => t('and'),
+        'or' => t('or'),
+      ),
+      '#parents' => $andor['parents'],
+      '#default_value' => $andor['value'],
+      '#attributes' => array('data-rid' => $andor['rid']),
+    );
+  }
+  else {
+    return array(
+      '#type' => 'container',
+      '#attributes' => array('class' => array('webform-andor'), 'data-rid' => $andor['rid']),
+      'andor_text' => array(
+        '#markup' => $andor['value'] == 'or' ? t('or') : t('and'),
+      ),
+    );
+  }
+}
+
 /**
  * Helper. Generate form elements for one rule.
  */
-function _webform_conditional_rule_expand($element, $rid, $conditional, $level, $andor) {
+function _webform_conditional_rule_expand($element, $rid, $conditional, $level, &$andor) {
   return array(
     '#level' => $level,
     'source_type' => array(
@@ -472,22 +499,7 @@ function _webform_conditional_rule_expand($element, $rid, $conditional, $level, 
         'event' => 'click',
       ),
     ),
-
-    // The and/or selector is shown for every rule, even though the whole
-    // conditional group shares a single and/or property. They are made to match
-    // via JavaScript (though they all share the same "name" attribute so only
-    // a single value is ever submitted via POST).
-    'andor' => array(
-      '#type' => 'select',
-      '#title' => t('And/or'),
-      '#options' => array(
-        'and' => t('and'),
-        'or' => t('or'),
-      ),
-      '#parents' => array_merge($element['#parents'], array('andor')),
-      '#default_value' => $element['#default_value']['andor'],
-    ),
-
+    'andor' => _webform_conditional_andor_expand($andor),
   );
 }
 
