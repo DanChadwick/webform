@@ -372,6 +372,9 @@ function _webform_conditional_expand($element) {
             '#type' => 'value',
             '#value' => $conditional['operator'],
           ),
+          'add_subconditional' => _webform_conditional_add_expand($element, $rid, TRUE),
+          'add' => _webform_conditional_add_expand($element, $rid, FALSE),
+          'remove' => _webform_conditional_remove_expand($element, $rid),
         );
         $andor_stack[++$level] = array(
           'value' => $conditional['operator'],
@@ -388,6 +391,9 @@ function _webform_conditional_expand($element) {
             '#type' => 'hidden',
             '#value' => 'conditional_end',
           ),
+          'add_subconditional' => _webform_conditional_add_expand($element, $rid, TRUE),
+          'add' => _webform_conditional_add_expand($element, $rid, FALSE),
+          'remove' => _webform_conditional_remove_expand($element, $rid),
           'andor' => _webform_conditional_andor_expand($andor_stack[$level]),
         );
         break;
@@ -407,6 +413,10 @@ function _webform_conditional_expand($element) {
   return $element;
 }
 
+
+/**
+ * Helper. Generate the and/or select or static text.
+ */
 function _webform_conditional_andor_expand(&$andor) {
   if ($andor['first']) {
     $andor['first'] = FALSE;
@@ -431,6 +441,46 @@ function _webform_conditional_andor_expand(&$andor) {
       ),
     );
   }
+}
+
+/**
+ * Helper. Generate the add_subconditional (+) or add + button.
+ */
+function _webform_conditional_add_expand($element, $rid, $subconditional) {
+  return array(
+    '#type' => 'submit',
+    '#value' => $subconditional ? t('(+)') : t('+'),
+    '#submit' => array('webform_conditional_element_add'),
+    '#subconditional' => $subconditional,
+    '#name' => implode('_', $element['#parents']) . '_rules_' . $rid .
+               ($subconditional ? '_add_subconditional' : '_add'),
+    '#attributes' => array('class' => array('webform-conditional-rule-add')),
+    '#ajax' => array(
+      'progress' => 'none',
+      'callback' => 'webform_conditional_element_ajax',
+      'wrapper' => $element['#wrapper_id'],
+      'event' => 'click',
+    ),
+  );
+}
+
+/**
+ * Helper. Generate the add_subconditional (+), add + or remove - button.
+ */
+function _webform_conditional_remove_expand($element, $rid) {
+  return array(
+    '#type' => 'submit',
+    '#value' => t('-'),
+    '#submit' => array('webform_conditional_element_remove'),
+    '#name' => implode('_', $element['#parents']) . '_rules_' . $rid . '_remove',
+    '#attributes' => array('class' => array('webform-conditional-rule-remove')),
+    '#ajax' => array(
+      'progress' => 'none',
+      'callback' => 'webform_conditional_element_ajax',
+      'wrapper' => $element['#wrapper_id'],
+      'event' => 'click',
+    ),
+  );
 }
 
 /**
@@ -461,46 +511,9 @@ function _webform_conditional_rule_expand($element, $rid, $conditional, $level, 
       '#size' => 20,
       '#default_value' => $conditional['value'],
     ),
-    'add_subconditional' => array(
-      '#type' => 'submit',
-      '#value' => t('(+)'),
-      '#submit' => array('webform_conditional_element_add'),
-      '#subconditional' => TRUE,
-      '#name' => implode('_', $element['#parents']) . '_rules_' . $rid . '_add_subconditional',
-      '#attributes' => array('class' => array('webform-conditional-rule-add')),
-      '#ajax' => array(
-        'progress' => 'none',
-        'callback' => 'webform_conditional_element_ajax',
-        'wrapper' => $element['#wrapper_id'],
-        'event' => 'click',
-      ),
-    ),
-    'add' => array(
-      '#type' => 'submit',
-      '#value' => t('+'),
-      '#submit' => array('webform_conditional_element_add'),
-      '#name' => implode('_', $element['#parents']) . '_rules_' . $rid . '_add',
-      '#attributes' => array('class' => array('webform-conditional-rule-add')),
-      '#ajax' => array(
-        'progress' => 'none',
-        'callback' => 'webform_conditional_element_ajax',
-        'wrapper' => $element['#wrapper_id'],
-        'event' => 'click',
-      ),
-    ),
-    'remove' => array(
-      '#type' => 'submit',
-      '#value' => t('-'),
-      '#submit' => array('webform_conditional_element_remove'),
-      '#name' => implode('_', $element['#parents']) . '_rules_' . $rid . '_remove',
-      '#attributes' => array('class' => array('webform-conditional-rule-remove')),
-      '#ajax' => array(
-        'progress' => 'none',
-        'callback' => 'webform_conditional_element_ajax',
-        'wrapper' => $element['#wrapper_id'],
-        'event' => 'click',
-      ),
-    ),
+    'add_subconditional' => _webform_conditional_add_expand($element, $rid, TRUE),
+    'add' => _webform_conditional_add_expand($element, $rid, FALSE),
+    'remove' => _webform_conditional_remove_expand($element, $rid),
     'andor' => _webform_conditional_andor_expand($andor),
   );
 }
@@ -627,6 +640,54 @@ function _webform_conditional_expand_value_forms($node) {
 }
 
 /**
+ * Helper. Find the matching end of a given subconditional.
+ */
+function _webform_conditional_find_end($conditionals, $origin_rid) {
+  $rids = array_keys($conditionals);
+  $offset = array_search($origin_rid, $rids);
+  $delta_level = 0;
+  foreach (array_slice($conditionals, $offset, NULL, TRUE) as $rid => $conditional) {
+    switch ($conditional['source_type']) {
+      case 'conditional_start':
+        $delta_level++;
+        break;
+      case 'conditional_end':
+        $delta_level--;
+        break;
+    }
+    if ($delta_level == 0) {
+      return $rid;
+    }
+  }
+  // Mis-matched conditional_start / _end. Should be impossible. Return NULL.
+  return NULL;
+}
+
+/**
+ * Helper. Find the matching start or end of a given subconditional.
+ */
+function _webform_conditional_find_start($conditionals, $origin_rid) {
+  $rids = array_keys($conditionals);
+  $offset = array_search($origin_rid, $rids);
+  $delta_level = 0;
+  foreach (array_reverse(array_slice($conditionals, 0, $offset + 1, TRUE), TRUE) as $rid => $conditional) {
+    switch ($conditional['source_type']) {
+      case 'conditional_end':
+        $delta_level++;
+        break;
+      case 'conditional_start':
+        $delta_level--;
+        break;
+    }
+    if ($delta_level == 0) {
+      return $rid;
+    }
+  }
+  // Mis-matched conditional_start / _end. Should be impossible. Return NULL.
+  return NULL;
+}
+
+/**
  * Submit handler for webform_conditional elements to add a new rule or action.
  */
 function webform_conditional_element_add($form, &$form_state) {
@@ -651,16 +712,16 @@ function webform_conditional_element_add($form, &$form_state) {
   // right spot.
   $rids = array_keys($parent_values);
   $offset = array_search($rid, $rids);
+  $default_rule = array(
+      'source' => NULL,
+      'source_type' => 'component',
+      'operator' => NULL,
+      'value' => NULL,
+  );
   if (empty($button['#subconditional'])) {
-    $new[0] = $parent_values[$rid];
+    $new[0] = $parent_values[$rid]['source_type'] == 'component' ? $parent_values[$rid] : $default_value;
   }
   else {
-    $default_rule = array(
-        'source' => NULL,
-        'source_type' => 'component',
-        'operator' => NULL,
-        'value' => NULL,
-    );
     $new = array(
       array('source_type' => 'conditional_start', 'operator' => 'and') + $default_rule,
       $default_rule,
@@ -683,7 +744,7 @@ function webform_conditional_element_remove($form, &$form_state) {
   $button = $form_state['clicked_button'];
   $parents = $button['#parents'];
   $action = array_pop($parents);
-  $current_id = array_pop($parents);
+  $rid = array_pop($parents);
 
   // Recurse through the form values until we find the root Webform conditional.
   $parent_values = &$form_state['values'];
@@ -692,9 +753,16 @@ function webform_conditional_element_remove($form, &$form_state) {
       $parent_values = &$parent_values[$key];
     }
   }
-
+  switch ($parent_values[$rid]['source_type']) {
+    case 'conditional_start':
+      unset($parent_values[_webform_conditional_find_end($parent_values, $rid)]);
+      break;
+    case 'conditional_end':
+      unset($parent_values[_webform_conditional_find_start($parent_values, $rid)]);
+      break;
+  }
   // Remove this rule or action from the list of conditionals.
-  unset($parent_values[$current_id]);
+  unset($parent_values[$rid]);
 
   $form_state['rebuild'] = TRUE;
 }
@@ -728,7 +796,6 @@ function webform_delete_empty_subconditionals(&$conditional) {
     }
   } while ($empty_deleted);
 }
-
 
 /**
  * AJAX callback to render out adding a new condition.
