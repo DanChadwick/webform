@@ -642,10 +642,9 @@ function _webform_conditional_expand_value_forms($node) {
 /**
  * Helper. Find the matching end of a given subconditional.
  */
-function _webform_conditional_find_end($conditionals, $origin_rid) {
+function _webform_conditional_find_end($conditionals, $origin_rid, $delta_level = 0) {
   $rids = array_keys($conditionals);
   $offset = array_search($origin_rid, $rids);
-  $delta_level = 0;
   foreach (array_slice($conditionals, $offset, NULL, TRUE) as $rid => $conditional) {
     switch ($conditional['source_type']) {
       case 'conditional_start':
@@ -659,17 +658,16 @@ function _webform_conditional_find_end($conditionals, $origin_rid) {
       return $rid;
     }
   }
-  // Mis-matched conditional_start / _end. Should be impossible. Return NULL.
+  // Mis-matched conditional_start / _end. Return NULL.
   return NULL;
 }
 
 /**
  * Helper. Find the matching start or end of a given subconditional.
  */
-function _webform_conditional_find_start($conditionals, $origin_rid) {
+function _webform_conditional_find_start($conditionals, $origin_rid, $delta_level = 0) {
   $rids = array_keys($conditionals);
   $offset = array_search($origin_rid, $rids);
-  $delta_level = 0;
   foreach (array_reverse(array_slice($conditionals, 0, $offset + 1, TRUE), TRUE) as $rid => $conditional) {
     switch ($conditional['source_type']) {
       case 'conditional_end':
@@ -683,7 +681,7 @@ function _webform_conditional_find_start($conditionals, $origin_rid) {
       return $rid;
     }
   }
-  // Mis-matched conditional_start / _end. Should be impossible. Return NULL.
+  // Mis-matched conditional_start / _end. Return NULL.
   return NULL;
 }
 
@@ -696,11 +694,13 @@ function webform_conditional_element_add($form, &$form_state) {
   $action = array_pop($parents);
   $rid = array_pop($parents);
 
-  // Recurse through the form values until we find the root Webform conditional.
+  // Recurse through the form values until we find the Webform conditional rules
+  // or actions. Save the conditional prior to descending to rules/actions.
   $parent_values = &$form_state['values'];
   $input_values = &$form_state['input'];
   foreach ($parents as $key) {
     if (array_key_exists($key, $parent_values)) {
+      $conditional = $parent_values;
       $parent_values = &$parent_values[$key];
     }
     if (array_key_exists($key, $input_values)) {
@@ -722,8 +722,13 @@ function webform_conditional_element_add($form, &$form_state) {
     $new[0] = $parent_values[$rid]['source_type'] == 'component' ? $parent_values[$rid] : $default_value;
   }
   else {
+    // The default andor operator is opposite of current subconditional's
+    // operatior.
+    $start_rid = _webform_conditional_find_start($parent_values, $rid, 1);
+    $current_op = $start_rid ? $parent_values[$start_rid]['operator'] : $conditional['andor'];
+    $current_op = $current_op == 'and' ? 'or' : 'and';
     $new = array(
-      array('source_type' => 'conditional_start', 'operator' => 'and') + $default_rule,
+      array('source_type' => 'conditional_start', 'operator' => $current_op) + $default_rule,
       $default_rule,
       $default_rule,
       array('source_type' => 'conditional_end') + $default_rule,
