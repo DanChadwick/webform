@@ -397,8 +397,11 @@ function _webform_conditional_expand($element) {
           'andor' => _webform_conditional_andor_expand($andor_stack[$level]),
         );
         break;
-      default:
+      case 'component':
         $element['rules'][$rid] = _webform_conditional_rule_expand($element, $rid, $conditional, $level, $andor_stack[$level]);
+        break;
+      default:
+        drupal_set_message(t('Unexpected conditional rule source type found (rule id @rid). Contact the administrator.', array('@rid' => $rid)), 'error');
         // break;
     }
   }
@@ -641,11 +644,22 @@ function _webform_conditional_expand_value_forms($node) {
 
 /**
  * Helper. Find the matching end of a given subconditional.
+ *
+ * @param array $rules
+ *   Array of conditional rules to be searched.
+ * @param integer $origin_rid
+ *   The starting rule id for the search
+ * @param integer $target_delta_level
+ *   The level that is sought. 0 for current left. -1 for parent.
+ * @return integer
+ *   The rid of the found rule, or -1 if none. Note that NULL is not used as a
+ *   semaphore for "not found" because it casts to 0, which is a valid rule id.
  */
-function _webform_conditional_find_end($conditionals, $origin_rid, $delta_level = 0) {
-  $rids = array_keys($conditionals);
+function _webform_conditional_find_end($rules, $origin_rid, $target_delta_level = 0) {
+  $rids = array_keys($rules);
   $offset = array_search($origin_rid, $rids);
-  foreach (array_slice($conditionals, $offset, NULL, TRUE) as $rid => $conditional) {
+  $delta_level = 0;
+  foreach (array_slice($rules, $offset, NULL, TRUE) as $rid => $conditional) {
     switch ($conditional['source_type']) {
       case 'conditional_start':
         $delta_level++;
@@ -654,21 +668,24 @@ function _webform_conditional_find_end($conditionals, $origin_rid, $delta_level 
         $delta_level--;
         break;
     }
-    if ($delta_level == 0) {
+    if ($delta_level == $target_delta_level) {
       return $rid;
     }
   }
-  // Mis-matched conditional_start / _end. Return NULL.
-  return NULL;
+  // Mis-matched conditional_start / _end. Return -1.
+  return -1;
 }
 
 /**
  * Helper. Find the matching start or end of a given subconditional.
+ *
+ * @see _webform_conditional_find_end().
  */
-function _webform_conditional_find_start($conditionals, $origin_rid, $delta_level = 0) {
-  $rids = array_keys($conditionals);
+function _webform_conditional_find_start($rules, $origin_rid, $target_delta_level = 0) {
+  $rids = array_keys($rules);
   $offset = array_search($origin_rid, $rids);
-  foreach (array_reverse(array_slice($conditionals, 0, $offset + 1, TRUE), TRUE) as $rid => $conditional) {
+  $delta_level = 0;
+  foreach (array_reverse(array_slice($rules, 0, $offset + 1, TRUE), TRUE) as $rid => $conditional) {
     switch ($conditional['source_type']) {
       case 'conditional_end':
         $delta_level++;
@@ -677,12 +694,12 @@ function _webform_conditional_find_start($conditionals, $origin_rid, $delta_leve
         $delta_level--;
         break;
     }
-    if ($delta_level == 0) {
+    if ($delta_level == $target_delta_level) {
       return $rid;
     }
   }
-  // Mis-matched conditional_start / _end. Return NULL.
-  return NULL;
+  // Mis-matched conditional_start / _end. Return -1.
+  return -1;
 }
 
 /**
@@ -719,13 +736,13 @@ function webform_conditional_element_add($form, &$form_state) {
       'value' => NULL,
   );
   if (empty($button['#subconditional'])) {
-    $new[0] = $parent_values[$rid]['source_type'] == 'component' ? $parent_values[$rid] : $default_value;
+    $new[0] = $parent_values[$rid]['source_type'] == 'component' ? $parent_values[$rid] : $default_rule;
   }
   else {
     // The default andor operator is opposite of current subconditional's
     // operatior.
-    $start_rid = _webform_conditional_find_start($parent_values, $rid, 1);
-    $current_op = $start_rid ? $parent_values[$start_rid]['operator'] : $conditional['andor'];
+    $parent_rid = _webform_conditional_find_start($parent_values, $rid, -1);
+    $current_op = $parent_rid < 0 ? $conditional['andor'] : $parent_values[$parent_rid]['operator'];
     $current_op = $current_op == 'and' ? 'or' : 'and';
     $new = array(
       array('source_type' => 'conditional_start', 'operator' => $current_op) + $default_rule,
@@ -774,8 +791,14 @@ function webform_conditional_element_remove($form, &$form_state) {
 
 /**
  * Helper. Delete any subconditionals which contain no rules.
+ *
+ * @param &array $conditional
+ *   Conditional array containing the rules.
+ * @return array
+ *   Array of deleted subconditionals. Empty array if none were deleted.
  */
 function webform_delete_empty_subconditionals(&$conditional) {
+  $deleted = array();
   do {
     $empty_deleted = FALSE;
     $open_rid = NULL;
@@ -789,6 +812,8 @@ function webform_delete_empty_subconditionals(&$conditional) {
             // A conditional_start rule was immediately followed by a
             // conditional_end rule. Delete them both. Repeat the check in case
             // the parent is now empty.
+            $deleted[$open_rid] = $open_rid;
+            $deleted[$rid] = $rid;
             unset($conditional['rules'][$open_rid], $conditional['rules'][$rid]);
             $open_rid = NULL;
             $empty_deleted = TRUE;
@@ -800,6 +825,7 @@ function webform_delete_empty_subconditionals(&$conditional) {
       }
     }
   } while ($empty_deleted);
+  return $deleted;
 }
 
 /**
