@@ -175,7 +175,7 @@ td.webform-email-option {
   padding-left: 1em;
   padding-right: 9em;
   margin-left: 3em;
-  max-width: 650px;
+  max-width: 750px;
 }
 
 .webform-conditional-new {
@@ -201,7 +201,7 @@ td.webform-email-option {
 .webform-conditional-operations {
   position: absolute;
   right: 0;
-  margin-top: .2em;
+  margin-top: .1em;
 }
 
 .webform-andor {
@@ -226,7 +226,7 @@ td.webform-email-option {
 .webform-conditional-new input.form-submit,
 .webform-conditional-operations input.form-submit {
   margin: 0 2px;
-  padding: 2px 6px;
+  padding: 0 6px 2px 6px;
 }
 
 #webform-conditionals-table input.progress-disabled,
