@@ -1414,6 +1414,7 @@ function webform_conditional_prepare_javascript($node, $submission_data, $page_n
         $conditional_type = webform_component_property($source_component['type'], 'conditional_type');
         $operator_info = $operators[$conditional_type][$rule['operator']];
         $rule_settings = array(
+          'source_type' => $rule['source_type'],
           'source' => $source_id,
           'value' => $rule['value'],
           'callback' => $operator_info['js comparison callback'],
