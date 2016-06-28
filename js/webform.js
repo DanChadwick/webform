@@ -189,7 +189,7 @@
             executionStackAccumulate(window['Drupal']['webform'][rule.callback](element, existingValue, rule['value']));
             break;
           case 'conditional_start':
-            executionStackPush(rule['operator']);
+            executionStackPush(rule['andor']);
             break;
           case 'conditional_end':
             executionStackAccumulate(executionStackPop());

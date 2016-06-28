@@ -1397,34 +1397,47 @@ function webform_conditional_prepare_javascript($node, $submission_data, $page_n
     }
     // Add on the list of rules to the conditional group.
     foreach ($conditional['rules'] as $rule) {
-      if ($rule['source_type'] == 'component') {
-        $source_component = $components[$rule['source']];
-        $source_parents = webform_component_parent_keys($node, $source_component);
-        $source_id = 'webform-component--' . str_replace('_', '-', implode('--', $source_parents));
-        $rid_key = 'rid_' . $rule['rid'];
+      $rid_key = 'rid_' . $rule['rid'];
+      switch ($rule['source_type']) {
+        case 'component':
+          $source_component = $components[$rule['source']];
+          $source_parents = webform_component_parent_keys($node, $source_component);
+          $source_id = 'webform-component--' . str_replace('_', '-', implode('--', $source_parents));
 
-        // If this source has a value set, add that as a setting.
-        // NULL or array(NULL) should be sent as an empty array to simplify the jQuery.
-        if (isset($submission_data[$source_component['cid']])) {
-          $source_value = $submission_data[$source_component['cid']];
-          $source_value = is_array($source_value) ? $source_value : array($source_value);
-          $settings['values'][$source_id] = $source_value === array(NULL) ? array() : $source_value;
-        }
+          // If this source has a value set, add that as a setting.
+          // NULL or array(NULL) should be sent as an empty array to simplify the jQuery.
+          if (isset($submission_data[$source_component['cid']])) {
+            $source_value = $submission_data[$source_component['cid']];
+            $source_value = is_array($source_value) ? $source_value : array($source_value);
+            $settings['values'][$source_id] = $source_value === array(NULL) ? array() : $source_value;
+          }
 
-        $conditional_type = webform_component_property($source_component['type'], 'conditional_type');
-        $operator_info = $operators[$conditional_type][$rule['operator']];
-        $rule_settings = array(
-          'source_type' => $rule['source_type'],
-          'source' => $source_id,
-          'value' => $rule['value'],
-          'callback' => $operator_info['js comparison callback'],
-        );
-        if (isset($operator_info['comparison prepare js'])) {
-          $callback = $operator_info['comparison prepare js'];
-          $rule_settings['value'] = $callback($rule['value']);
-        }
-        $settings['ruleGroups'][$rgid_key]['rules'][$rid_key] = $rule_settings;
-        $settings['sourceMap'][$source_id][$rgid_key] = $rgid_key;
+          $conditional_type = webform_component_property($source_component['type'], 'conditional_type');
+          $operator_info = $operators[$conditional_type][$rule['operator']];
+          $rule_settings = array(
+            'source_type' => $rule['source_type'],
+            'source' => $source_id,
+            'value' => $rule['value'],
+            'callback' => $operator_info['js comparison callback'],
+          );
+          if (isset($operator_info['comparison prepare js'])) {
+            $callback = $operator_info['comparison prepare js'];
+            $rule_settings['value'] = $callback($rule['value']);
+          }
+          $settings['ruleGroups'][$rgid_key]['rules'][$rid_key] = $rule_settings;
+          $settings['sourceMap'][$source_id][$rgid_key] = $rgid_key;
+          break;
+        case 'conditional_start':
+          $settings['ruleGroups'][$rgid_key]['rules'][$rid_key] = array(
+            'source_type' => $rule['source_type'],
+            'andor' => $rule['operator'],
+          );
+          break;
+        case 'conditional_end':
+          $settings['ruleGroups'][$rgid_key]['rules'][$rid_key] = array(
+            'source_type' => $rule['source_type'],
+          );
+          break;
       }
     }
   }
