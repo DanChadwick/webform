@@ -359,6 +359,7 @@ function _webform_conditional_expand($element) {
     'first' => TRUE,
   );
 
+  $last_rid = -1;
   foreach ($element['#default_value']['rules'] as $rid => $conditional) {
     switch ($conditional['source_type']) {
       case 'conditional_start':
@@ -396,6 +397,8 @@ function _webform_conditional_expand($element) {
           'remove' => _webform_conditional_remove_expand($element, $rid),
           'andor' => _webform_conditional_andor_expand($andor_stack[$level]),
         );
+        // Remove the last nested and/or.
+        unset($element['rules'][$last_rid]['andor']);
         break;
       case 'component':
         $element['rules'][$rid] = _webform_conditional_rule_expand($element, $rid, $conditional, $level, $andor_stack[$level]);
@@ -404,6 +407,7 @@ function _webform_conditional_expand($element) {
         drupal_set_message(t('Unexpected conditional rule source type found (rule id @rid). Contact the administrator.', array('@rid' => $rid)), 'error');
         // break;
     }
+    $last_rid = $rid;
   }
 
   // Remove the last and/or.
