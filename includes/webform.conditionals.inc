@@ -369,10 +369,8 @@ function _webform_conditional_expand($element) {
             '#type' => 'hidden',
             '#value' => 'conditional_start',
           ),
-          'operator' => array(
-            '#type' => 'value',
-            '#value' => $conditional['operator'],
-          ),
+          // The andor operator is located in the first child, which is
+          // guaranteed to exist. Therefore, don't add a 'value' element here.
           'add_subconditional' => _webform_conditional_add_expand($element, $rid, TRUE),
           'add' => _webform_conditional_add_expand($element, $rid, FALSE),
           'remove' => _webform_conditional_remove_expand($element, $rid),
